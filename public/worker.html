@@ -1,0 +1,291 @@
+<!DOCTYPE html>
+<html lang="en">
+
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>VERDASERVE – Worker Panel</title>
+    <link rel="stylesheet" href="/css/style.css">
+    <link rel="stylesheet" href="https://unpkg.com/leaflet@1.9.4/dist/leaflet.css" />
+</head>
+
+<body>
+    <div class="toast-container" id="toast-container"></div>
+
+    <!-- Auth Section -->
+    <div id="auth-section">
+        <div class="auth-page">
+            <a href="/portal.html" class="auth-back">← Back to Staff Portal</a>
+            <div class="auth-card">
+                <div class="auth-header">
+                    <div class="brand">🌿 VERDASERVE</div>
+                    <p>Worker Login</p>
+                </div>
+                <form id="auth-form" onsubmit="handleAuth(event)">
+                    <div class="form-group">
+                        <label class="form-label">Email</label>
+                        <input class="form-input" type="email" id="auth-email" placeholder="Enter your email" required>
+                    </div>
+                    <div class="form-group">
+                        <label class="form-label">Password</label>
+                        <input class="form-input" type="password" id="auth-password" placeholder="Enter your password"
+                            required>
+                    </div>
+                    <button class="btn btn-primary btn-block btn-lg" type="submit">Login</button>
+                </form>
+                <p class="auth-link" style="font-size:0.75rem;color:#9E9E9E;margin-top:1rem;">Demo: ravi@verdaserve.com
+                    / worker123</p>
+            </div>
+        </div>
+    </div>
+
+    <!-- App Shell -->
+    <div class="app-shell" id="app-shell">
+        <button class="hamburger" onclick="toggleSidebar()"><span></span><span></span><span></span></button>
+        <div class="overlay" id="overlay" onclick="toggleSidebar()"></div>
+        <aside class="sidebar" id="sidebar">
+            <div class="sidebar-header">
+                <a href="/" style="text-decoration:none;">
+                    <div class="sidebar-brand"><span class="leaf">🌿</span> VERDASERVE</div>
+                </a>
+                <div class="sidebar-role">Worker Panel</div>
+            </div>
+            <nav class="sidebar-nav">
+                <button class="nav-item active" data-page="dashboard" onclick="showPage('dashboard')"><span
+                        class="nav-icon">🏠</span> Dashboard</button>
+                <button class="nav-item" data-page="map" onclick="showPage('map')"><span class="nav-icon">🗺️</span>
+                    Live Map</button>
+                <button class="nav-item" data-page="vehicle" onclick="showPage('vehicle')"><span
+                        class="nav-icon">🚗</span> My Vehicle</button>
+            </nav>
+            <div class="sidebar-footer"><button class="logout-btn" onclick="logout()">🚪 Logout</button></div>
+        </aside>
+        <main class="main-content" id="main-content">
+            <div class="page" id="page-dashboard"></div>
+            <div class="page hidden" id="page-map"></div>
+            <div class="page hidden" id="page-vehicle"></div>
+        </main>
+    </div>
+
+    <script src="https://unpkg.com/leaflet@1.9.4/dist/leaflet.js"></script>
+    <script>
+        let currentUser = null;
+        const API = '';
+
+        async function api(path, opts = {}) {
+            const token = localStorage.getItem('verdaserve_worker_token');
+            const headers = { 'Content-Type': 'application/json' };
+            if (token) headers['Authorization'] = `Bearer ${token}`;
+            const res = await fetch(`${API}${path}`, { ...opts, headers });
+            const data = await res.json();
+            if (!res.ok) throw new Error(data.error || 'Request failed');
+            return data;
+        }
+
+        function toast(msg, type = 'success') {
+            const c = document.getElementById('toast-container');
+            const t = document.createElement('div');
+            t.className = `toast toast-${type}`;
+            t.textContent = msg;
+            c.appendChild(t);
+            setTimeout(() => t.remove(), 3000);
+        }
+
+        function toggleSidebar() {
+            document.getElementById('sidebar').classList.toggle('open');
+            document.getElementById('overlay').classList.toggle('active');
+        }
+
+        /* Auth */
+        async function handleAuth(e) {
+            e.preventDefault();
+            try {
+                const data = await api('/api/auth/worker-login', {
+                    method: 'POST', body: JSON.stringify({
+                        email: document.getElementById('auth-email').value,
+                        password: document.getElementById('auth-password').value,
+                    })
+                });
+                currentUser = data.worker;
+                localStorage.setItem('verdaserve_worker_token', data.token);
+                localStorage.setItem('verdaserve_worker', JSON.stringify(currentUser));
+                toast(`Welcome, ${currentUser.name}!`);
+                enterApp();
+            } catch (err) { toast(err.message, 'error'); }
+        }
+
+        function enterApp() {
+            document.getElementById('auth-section').style.display = 'none';
+            document.getElementById('app-shell').classList.add('active');
+            showPage('dashboard');
+        }
+
+        function logout() {
+            localStorage.removeItem('verdaserve_worker_token');
+            localStorage.removeItem('verdaserve_worker');
+            currentUser = null;
+            location.reload();
+        }
+
+        /* Page Nav */
+        function showPage(page) {
+            document.querySelectorAll('.page').forEach(p => p.classList.add('hidden'));
+            document.getElementById(`page-${page}`).classList.remove('hidden');
+            document.querySelectorAll('.nav-item').forEach(n => n.classList.remove('active'));
+            document.querySelector(`.nav-item[data-page="${page}"]`)?.classList.add('active');
+            document.getElementById('sidebar').classList.remove('open');
+            document.getElementById('overlay').classList.remove('active');
+            switch (page) {
+                case 'dashboard': loadDashboard(); break;
+                case 'map': loadMap(); break;
+                case 'vehicle': loadVehicle(); break;
+            }
+        }
+
+        /* Dashboard */
+        async function loadDashboard() {
+            const el = document.getElementById('page-dashboard');
+            el.innerHTML = `
+        <div class="page-header"><h1>Welcome, ${currentUser?.name || 'Worker'} 🚚</h1><p>Manage your assigned paper pickups.</p></div>
+        <div class="stats-grid" id="w-stats"></div>
+        <h2 style="font-size:1.2rem;font-weight:600;margin-bottom:1rem;">Assigned Pickups</h2>
+        <div class="booking-list" id="w-pickups"><div class="spinner"></div></div>
+      `;
+            try {
+                const { bookings } = await api('/api/workers/my-pickups');
+                const total = bookings.length;
+                const active = bookings.filter(b => !['completed', 'pending'].includes(b.status)).length;
+                const completed = bookings.filter(b => b.status === 'completed').length;
+
+                document.getElementById('w-stats').innerHTML = `
+          <div class="stat-card"><div class="stat-icon green">📦</div><div class="stat-value">${total}</div><div class="stat-label">Total Assigned</div></div>
+          <div class="stat-card"><div class="stat-icon orange">🔄</div><div class="stat-value">${active}</div><div class="stat-label">In Progress</div></div>
+          <div class="stat-card"><div class="stat-icon blue">✅</div><div class="stat-value">${completed}</div><div class="stat-label">Completed</div></div>
+        `;
+                const list = document.getElementById('w-pickups');
+                if (bookings.length === 0) {
+                    list.innerHTML = `<div class="empty-state"><div class="empty-icon">📭</div><h3>No pickups assigned</h3><p>New pickups will appear here when assigned.</p></div>`;
+                } else {
+                    list.innerHTML = bookings.map(b => workerCard(b)).join('');
+                }
+            } catch (err) { toast(err.message, 'error'); }
+        }
+
+        function workerCard(b) {
+            const statusText = b.status.replace(/_/g, ' ').replace(/\b\w/g, c => c.toUpperCase());
+            let btns = '';
+            if (b.status === 'assigned') btns = `<button class="btn btn-success btn-sm" onclick="updateStatus(${b.id},'accepted')">✅ Accept</button>`;
+            else if (b.status === 'accepted') btns = `<button class="btn btn-warning btn-sm" onclick="updateStatus(${b.id},'on_the_way')">🚚 On the Way</button>`;
+            else if (b.status === 'on_the_way') btns = `<button class="btn btn-primary btn-sm" onclick="updateStatus(${b.id},'completed')">✅ Complete</button>`;
+
+            return `
+        <div class="booking-card">
+          <div class="booking-info">
+            <h4>${b.user_name || 'Customer'} — ${b.paper_qty} kg ${b.paper_type}</h4>
+            <div class="booking-meta">
+              <span>📅 ${b.preferred_date}</span><span>🕐 ${b.preferred_time}</span>
+              <span>📍 ${(b.address || '').substring(0, 40)}...</span>
+              <span>📞 ${b.user_phone || 'N/A'}</span>
+            </div>
+          </div>
+          <div style="text-align:right;display:flex;flex-direction:column;gap:0.5rem;align-items:flex-end;">
+            <span class="badge badge-${b.status}">${statusText}</span>
+            ${btns}
+            <button class="btn btn-secondary btn-sm" onclick="showMapForBooking(${b.id})">🗺️ Map</button>
+          </div>
+        </div>`;
+        }
+
+        async function updateStatus(id, status) {
+            try {
+                await api(`/api/bookings/${id}/status`, { method: 'PATCH', body: JSON.stringify({ status }) });
+                toast(`Status updated to ${status.replace(/_/g, ' ')}! ✅`);
+                loadDashboard();
+            } catch (err) { toast(err.message, 'error'); }
+        }
+
+        /* Map */
+        let mapTargetBooking = null;
+        function showMapForBooking(id) { mapTargetBooking = id; showPage('map'); }
+
+        async function loadMap() {
+            document.getElementById('page-map').innerHTML = `
+        <div class="page-header"><h1>🗺️ Live Tracking</h1><p>Navigate to your pickup locations.</p></div>
+        <div class="card"><div class="map-container" id="worker-map" style="height:500px;"></div></div>
+      `;
+            setTimeout(async () => {
+                const c = document.getElementById('worker-map');
+                if (!c) return;
+                const map = L.map(c).setView([28.6139, 77.2090], 12);
+                L.tileLayer('https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png', { attribution: '© OpenStreetMap' }).addTo(map);
+                try {
+                    const { bookings } = await api('/api/workers/my-pickups');
+                    const active = bookings.filter(b => b.status !== 'completed');
+                    if (mapTargetBooking) {
+                        const b = bookings.find(x => x.id === mapTargetBooking);
+                        if (b && b.lat && b.lng) {
+                            map.setView([b.lat, b.lng], 14);
+                            L.marker([b.lat, b.lng]).addTo(map).bindPopup(`📦 ${b.user_name}<br>${b.address}<br>${b.paper_qty} kg`).openPopup();
+                        }
+                        mapTargetBooking = null;
+                    }
+                    active.forEach(b => {
+                        if (b.lat && b.lng) L.marker([b.lat, b.lng]).addTo(map).bindPopup(`📦 ${b.user_name || 'Customer'}<br>${b.address}<br>${b.paper_qty} kg`);
+                    });
+                    const workerIcon = L.divIcon({ className: '', html: '<div style="font-size:2rem;">🚚</div>', iconSize: [32, 32] });
+                    L.marker([28.62, 77.21], { icon: workerIcon }).addTo(map).bindPopup('You are here');
+                } catch (err) { toast(err.message, 'error'); }
+            }, 300);
+        }
+
+        /* Vehicle */
+        let selectedVehicle = '';
+        function loadVehicle() {
+            const vehicles = [
+                { type: 'bike', icon: '🏍️', name: 'Bike', cap: 'Up to 10 kg' },
+                { type: 'auto', icon: '🛺', name: 'Auto', cap: 'Up to 50 kg' },
+                { type: 'van', icon: '🚐', name: 'Van', cap: 'Up to 200 kg' },
+                { type: 'truck', icon: '🚛', name: 'Truck', cap: '200+ kg' },
+            ];
+            selectedVehicle = currentUser?.vehicle_type || 'bike';
+            document.getElementById('page-vehicle').innerHTML = `
+        <div class="page-header"><h1>🚗 Vehicle Selection</h1><p>Choose your vehicle based on the load size.</p></div>
+        <div class="card" style="max-width:700px;">
+          <h3 style="font-weight:600;margin-bottom:1.5rem;">Select Your Vehicle</h3>
+          <div class="vehicle-grid">
+            ${vehicles.map(v => `
+              <div class="vehicle-card ${v.type === selectedVehicle ? 'selected' : ''}" onclick="selectVehicle('${v.type}',this)">
+                <div class="vehicle-icon">${v.icon}</div>
+                <div class="vehicle-name">${v.name}</div>
+                <div class="vehicle-cap">${v.cap}</div>
+              </div>`).join('')}
+          </div>
+          <button class="btn btn-primary btn-block" style="margin-top:1.5rem;" onclick="saveVehicle()">💾 Save Vehicle</button>
+        </div>`;
+        }
+
+        function selectVehicle(type, card) {
+            document.querySelectorAll('.vehicle-card').forEach(c => c.classList.remove('selected'));
+            card.classList.add('selected');
+            selectedVehicle = type;
+        }
+
+        async function saveVehicle() {
+            try {
+                await api('/api/workers/vehicle', { method: 'PATCH', body: JSON.stringify({ vehicle_type: selectedVehicle }) });
+                currentUser.vehicle_type = selectedVehicle;
+                localStorage.setItem('verdaserve_worker', JSON.stringify(currentUser));
+                toast('Vehicle updated! 🚗');
+            } catch (err) { toast(err.message, 'error'); }
+        }
+
+        /* Auto-login */
+        (function init() {
+            const token = localStorage.getItem('verdaserve_worker_token');
+            const user = localStorage.getItem('verdaserve_worker');
+            if (token && user) { currentUser = JSON.parse(user); enterApp(); }
+        })();
+    </script>
+</body>
+
+</html>

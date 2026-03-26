@@ -1,0 +1,467 @@
+<!DOCTYPE html>
+<html lang="en">
+
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>VERDASERVE – Customer Panel</title>
+  <link rel="stylesheet" href="/css/style.css">
+  <link rel="stylesheet" href="https://unpkg.com/leaflet@1.9.4/dist/leaflet.css" />
+  <link rel="stylesheet" href="https://unpkg.com/leaflet-routing-machine@latest/dist/leaflet-routing-machine.css" />
+</head>
+
+<body>
+  <div class="toast-container" id="toast-container"></div>
+
+  <!-- Auth Section -->
+  <div id="auth-section">
+    <div class="auth-page">
+      <a href="/portal.html" class="auth-back" style="left: auto; right: 2rem;">Staff Portal →</a>
+      <div class="auth-card">
+        <div class="auth-header">
+          <div class="brand">🌿 VERDASERVE</div>
+          <p>Customer Portal</p>
+        </div>
+        <div class="auth-tabs">
+          <button class="auth-tab active" id="tab-login" onclick="switchTab('login')">Login</button>
+          <button class="auth-tab" id="tab-signup" onclick="switchTab('signup')">Sign Up</button>
+        </div>
+        <form id="auth-form" onsubmit="handleAuth(event)">
+          <div id="signup-fields" class="hidden">
+            <div class="form-group">
+              <label class="form-label">Full Name</label>
+              <input class="form-input" type="text" id="auth-name" placeholder="Enter your name">
+            </div>
+            <div class="form-group">
+              <label class="form-label">Phone</label>
+              <input class="form-input" type="tel" id="auth-phone" placeholder="Phone number">
+            </div>
+          </div>
+          <div class="form-group">
+            <label class="form-label">Email</label>
+            <input class="form-input" type="email" id="auth-email" placeholder="Enter your email" required>
+          </div>
+          <div class="form-group">
+            <label class="form-label">Password</label>
+            <input class="form-input" type="password" id="auth-password" placeholder="Enter your password" required>
+          </div>
+          <button class="btn btn-primary btn-block btn-lg" type="submit" id="auth-submit-btn">Login</button>
+        </form>
+      </div>
+    </div>
+  </div>
+
+  <!-- App Shell -->
+  <div class="app-shell" id="app-shell">
+    <button class="hamburger" id="hamburger" onclick="toggleSidebar()">
+      <span></span><span></span><span></span>
+    </button>
+    <div class="overlay" id="overlay" onclick="toggleSidebar()"></div>
+    <aside class="sidebar" id="sidebar">
+      <div class="sidebar-header">
+        <a href="/" style="text-decoration:none;">
+          <div class="sidebar-brand"><span class="leaf">🌿</span> VERDASERVE</div>
+        </a>
+        <div class="sidebar-role">Customer Panel</div>
+      </div>
+      <nav class="sidebar-nav">
+        <button class="nav-item active" data-page="dashboard" onclick="showPage('dashboard')">
+          <span class="nav-icon">🏠</span> Dashboard
+        </button>
+        <button class="nav-item" data-page="book-pickup" onclick="showPage('book-pickup')">
+          <span class="nav-icon">📦</span> Book Pickup
+        </button>
+        <button class="nav-item" data-page="my-address" onclick="showPage('my-address')">
+          <span class="nav-icon">📍</span> My Address
+        </button>
+        <button class="nav-item" data-page="my-bookings" onclick="showPage('my-bookings')">
+          <span class="nav-icon">📋</span> My Bookings
+        </button>
+        <button class="nav-item" data-page="tracking" onclick="showPage('tracking')">
+          <span class="nav-icon">🔍</span> Track Pickup
+        </button>
+      </nav>
+      <div class="sidebar-footer">
+        <button class="logout-btn" onclick="logout()">🚪 Logout</button>
+      </div>
+    </aside>
+    <main class="main-content" id="main-content">
+      <!-- Pages -->
+      <div class="page" id="page-dashboard"></div>
+      <div class="page hidden" id="page-book-pickup"></div>
+      <div class="page hidden" id="page-my-address"></div>
+      <div class="page hidden" id="page-my-bookings"></div>
+      <div class="page hidden" id="page-tracking"></div>
+    </main>
+  </div>
+
+  <script src="https://unpkg.com/leaflet@1.9.4/dist/leaflet.js"></script>
+  <script src="https://unpkg.com/leaflet-routing-machine@latest/dist/leaflet-routing-machine.js"></script>
+  <script>
+    /* ===== Shared Helpers ===== */
+    let currentUser = null;
+    const API = '';
+
+    async function api(path, options = {}) {
+      const token = localStorage.getItem('verdaserve_token');
+      const headers = { 'Content-Type': 'application/json' };
+      if (token) headers['Authorization'] = `Bearer ${token}`;
+      const res = await fetch(`${API}${path}`, { ...options, headers });
+      const data = await res.json();
+      if (!res.ok) throw new Error(data.error || 'Request failed');
+      return data;
+    }
+
+    function toast(msg, type = 'success') {
+      const c = document.getElementById('toast-container');
+      const t = document.createElement('div');
+      t.className = `toast toast-${type}`;
+      t.textContent = msg;
+      c.appendChild(t);
+      setTimeout(() => t.remove(), 3000);
+    }
+
+    function toggleSidebar() {
+      document.getElementById('sidebar').classList.toggle('open');
+      document.getElementById('overlay').classList.toggle('active');
+    }
+
+    /* ===== Auth ===== */
+    let authMode = 'login';
+
+    function switchTab(mode) {
+      authMode = mode;
+      document.getElementById('tab-login').classList.toggle('active', mode === 'login');
+      document.getElementById('tab-signup').classList.toggle('active', mode === 'signup');
+      document.getElementById('signup-fields').classList.toggle('hidden', mode === 'login');
+      document.getElementById('auth-submit-btn').textContent = mode === 'login' ? 'Login' : 'Create Account';
+    }
+
+    async function handleAuth(e) {
+      e.preventDefault();
+      const email = document.getElementById('auth-email').value;
+      const password = document.getElementById('auth-password').value;
+      try {
+        let data;
+        if (authMode === 'signup') {
+          const name = document.getElementById('auth-name').value;
+          const phone = document.getElementById('auth-phone').value;
+          if (!name) { toast('Please enter your name', 'error'); return; }
+          data = await api('/api/auth/signup', { method: 'POST', body: JSON.stringify({ name, email, password, phone }) });
+          currentUser = data.user;
+        } else {
+          data = await api('/api/auth/login', { method: 'POST', body: JSON.stringify({ email, password }) });
+          currentUser = data.user;
+        }
+        localStorage.setItem('verdaserve_token', data.token);
+        localStorage.setItem('verdaserve_user', JSON.stringify(currentUser));
+        toast(`Welcome, ${currentUser.name}!`);
+        enterApp();
+      } catch (err) { toast(err.message, 'error'); }
+    }
+
+    function enterApp() {
+      document.getElementById('auth-section').style.display = 'none';
+      document.getElementById('app-shell').classList.add('active');
+      showPage('dashboard');
+    }
+
+    function logout() {
+      localStorage.removeItem('verdaserve_token');
+      localStorage.removeItem('verdaserve_user');
+      currentUser = null;
+      location.reload();
+    }
+
+    /* ===== Page Navigation ===== */
+    function showPage(page) {
+      document.querySelectorAll('.page').forEach(p => p.classList.add('hidden'));
+      document.getElementById(`page-${page}`).classList.remove('hidden');
+      document.querySelectorAll('.nav-item').forEach(n => n.classList.remove('active'));
+      document.querySelector(`.nav-item[data-page="${page}"]`)?.classList.add('active');
+      document.getElementById('sidebar').classList.remove('open');
+      document.getElementById('overlay').classList.remove('active');
+
+      switch (page) {
+        case 'dashboard': loadDashboard(); break;
+        case 'book-pickup': loadBookPickup(); break;
+        case 'my-address': loadAddress(); break;
+        case 'my-bookings': loadBookings(); break;
+        case 'tracking': loadTracking(); break;
+      }
+    }
+
+    /* ===== Dashboard ===== */
+    async function loadDashboard() {
+      const el = document.getElementById('page-dashboard');
+      el.innerHTML = `
+        <div class="page-header">
+          <h1>Welcome back, ${currentUser?.name || 'User'} 👋</h1>
+          <p>Manage your waste paper pickups and contribute to a greener planet.</p>
+        </div>
+        <div class="stats-grid" id="user-stats"></div>
+        <div style="margin-bottom:2rem;">
+          <button class="btn btn-primary btn-lg" onclick="showPage('book-pickup')">📦 Book a Pickup</button>
+        </div>
+        <h2 style="font-size:1.2rem;font-weight:600;margin-bottom:1rem;">Recent Bookings</h2>
+        <div class="booking-list" id="user-recent"><div class="spinner"></div></div>
+      `;
+      try {
+        const { bookings } = await api('/api/bookings/my');
+        const total = bookings.length;
+        const pending = bookings.filter(b => b.status === 'pending').length;
+        const completed = bookings.filter(b => b.status === 'completed').length;
+        const totalKg = bookings.reduce((s, b) => s + b.paper_qty, 0);
+
+        document.getElementById('user-stats').innerHTML = `
+          <div class="stat-card"><div class="stat-icon green">📦</div><div class="stat-value">${total}</div><div class="stat-label">Total Bookings</div></div>
+          <div class="stat-card"><div class="stat-icon orange">⏳</div><div class="stat-value">${pending}</div><div class="stat-label">Pending</div></div>
+          <div class="stat-card"><div class="stat-icon blue">✅</div><div class="stat-value">${completed}</div><div class="stat-label">Completed</div></div>
+          <div class="stat-card"><div class="stat-icon green">♻️</div><div class="stat-value">${totalKg} kg</div><div class="stat-label">Paper Recycled</div></div>
+        `;
+        const list = document.getElementById('user-recent');
+        if (bookings.length === 0) {
+          list.innerHTML = `<div class="empty-state"><div class="empty-icon">📭</div><h3>No bookings yet</h3><p>Schedule your first paper pickup today!</p></div>`;
+        } else {
+          list.innerHTML = bookings.slice(0, 5).map(b => bookingCard(b)).join('');
+        }
+      } catch (err) { toast(err.message, 'error'); }
+    }
+
+    function bookingCard(b) {
+      const statusText = b.status.replace(/_/g, ' ').replace(/\b\w/g, c => c.toUpperCase());
+      return `
+        <div class="booking-card">
+          <div class="booking-info">
+            <h4>${b.paper_type.charAt(0).toUpperCase() + b.paper_type.slice(1)} — ${b.paper_qty} kg</h4>
+            <div class="booking-meta">
+              <span>📅 ${b.preferred_date}</span><span>🕐 ${b.preferred_time}</span>
+              <span>📍 ${(b.address || '').substring(0, 30)}...</span>
+              ${b.worker_name ? `<span>👷 ${b.worker_name}</span>` : ''}
+            </div>
+          </div>
+          <div style="text-align:right;">
+            <span class="badge badge-${b.status}">${statusText}</span>
+            ${b.status !== 'completed' ? `<br><button class="btn btn-secondary btn-sm" style="margin-top:0.5rem;" onclick="trackBooking(${b.id})">Track</button>` : ''}
+          </div>
+        </div>`;
+    }
+
+    /* ===== Book Pickup ===== */
+    function loadBookPickup() {
+      const user = JSON.parse(localStorage.getItem('verdaserve_user') || '{}');
+      const today = new Date().toISOString().split('T')[0];
+      document.getElementById('page-book-pickup').innerHTML = `
+        <div class="page-header"><h1>📦 Book Paper Pickup</h1><p>Schedule a convenient time for us to collect your waste paper.</p></div>
+        <div class="card" style="max-width:600px;">
+          <form onsubmit="submitBooking(event)">
+            <div class="form-group">
+              <label class="form-label">Paper Quantity (kg)</label>
+              <input class="form-input" type="number" id="bp-qty" min="1" max="1000" step="0.5" value="10" required>
+              <input type="range" id="bp-slider" min="1" max="100" value="10" style="width:100%;margin-top:0.5rem;accent-color:var(--green-600);" oninput="document.getElementById('bp-qty').value=this.value">
+            </div>
+            <div class="form-group">
+              <label class="form-label">Paper Type</label>
+              <select class="form-select" id="bp-type" required>
+                <option value="">Select paper type</option>
+                <option value="newspaper">📰 Newspaper</option>
+                <option value="books">📚 Books</option>
+                <option value="mixed">📄 Mixed Paper</option>
+                <option value="cardboard">📦 Cardboard</option>
+                <option value="office">🏢 Office Paper</option>
+              </select>
+            </div>
+            <div style="display:grid;grid-template-columns:1fr 1fr;gap:1rem;">
+              <div class="form-group"><label class="form-label">Preferred Date</label><input class="form-input" type="date" id="bp-date" min="${today}" required></div>
+              <div class="form-group"><label class="form-label">Preferred Time</label><input class="form-input" type="time" id="bp-time" required></div>
+            </div>
+            <div class="form-group">
+              <label class="form-label">Pickup Address</label>
+              <textarea class="form-input" id="bp-address" rows="3" placeholder="Enter your full pickup address" required>${user.address || ''}</textarea>
+            </div>
+            <button class="btn btn-primary btn-block btn-lg" type="submit">🌱 Schedule Pickup</button>
+          </form>
+        </div>`;
+    }
+
+    async function submitBooking(e) {
+      e.preventDefault();
+      try {
+        await api('/api/bookings', {
+          method: 'POST', body: JSON.stringify({
+            paper_qty: parseFloat(document.getElementById('bp-qty').value),
+            paper_type: document.getElementById('bp-type').value,
+            preferred_date: document.getElementById('bp-date').value,
+            preferred_time: document.getElementById('bp-time').value,
+            address: document.getElementById('bp-address').value,
+          })
+        });
+        toast('Pickup scheduled successfully! 🌱');
+        showPage('dashboard');
+      } catch (err) { toast(err.message, 'error'); }
+    }
+
+    /* ===== Address ===== */
+    let addrMap, addrMarker;
+    function loadAddress() {
+      const user = JSON.parse(localStorage.getItem('verdaserve_user') || '{}');
+      document.getElementById('page-my-address').innerHTML = `
+        <div class="page-header"><h1>📍 My Address</h1><p>Manage your pickup address and location.</p></div>
+        <div style="display:grid;grid-template-columns:1fr 1fr;gap:1.5rem;" class="address-grid">
+          <div class="card">
+            <h3 style="font-weight:600;margin-bottom:1rem;">Address Details</h3>
+            <form onsubmit="saveAddress(event)">
+              <div class="form-group"><label class="form-label">Full Address</label><textarea class="form-input" id="addr-text" rows="4" placeholder="Enter your complete address">${user.address || ''}</textarea></div>
+              <div class="form-group"><label class="form-label">Phone</label><input class="form-input" type="tel" id="addr-phone" value="${user.phone || ''}" placeholder="Your phone number"></div>
+              <p style="font-size:0.8rem;color:var(--grey-500);margin-bottom:1rem;">💡 Click on the map to set your location pin</p>
+              <button class="btn btn-primary btn-block" type="submit">💾 Save Address</button>
+            </form>
+          </div>
+          <div class="card"><h3 style="font-weight:600;margin-bottom:1rem;">📍 Location</h3><div class="map-container" id="address-map"></div></div>
+        </div>`;
+      setTimeout(() => {
+        const c = document.getElementById('address-map');
+        if (!c) return;
+        const lat = user.lat || 28.6139, lng = user.lng || 77.2090;
+        addrMap = L.map(c).setView([lat, lng], 13);
+        L.tileLayer('https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png', { attribution: '© OpenStreetMap' }).addTo(addrMap);
+        addrMarker = L.marker([lat, lng], { draggable: true }).addTo(addrMap);
+        addrMap.on('click', (e) => addrMarker.setLatLng(e.latlng));
+      }, 200);
+    }
+
+    async function saveAddress(e) {
+      e.preventDefault();
+      const latlng = addrMarker.getLatLng();
+      try {
+        const data = await api('/api/auth/profile', {
+          method: 'PUT', body: JSON.stringify({
+            address: document.getElementById('addr-text').value,
+            phone: document.getElementById('addr-phone').value,
+            lat: latlng.lat, lng: latlng.lng
+          })
+        });
+        localStorage.setItem('verdaserve_user', JSON.stringify(data.user));
+        currentUser = data.user;
+        toast('Address saved! 📍');
+      } catch (err) { toast(err.message, 'error'); }
+    }
+
+    /* ===== My Bookings ===== */
+    async function loadBookings() {
+      const el = document.getElementById('page-my-bookings');
+      el.innerHTML = `<div class="page-header"><h1>📋 My Bookings</h1><p>View all your paper pickup bookings.</p></div><div class="booking-list" id="all-bookings"><div class="spinner"></div></div>`;
+      try {
+        const { bookings } = await api('/api/bookings/my');
+        const list = document.getElementById('all-bookings');
+        list.innerHTML = bookings.length === 0
+          ? `<div class="empty-state"><div class="empty-icon">📭</div><h3>No bookings yet</h3><p>Schedule your first pickup!</p></div>`
+          : bookings.map(b => bookingCard(b)).join('');
+      } catch (err) { toast(err.message, 'error'); }
+    }
+
+    /* ===== Tracking ===== */
+    async function loadTracking(bookingId) {
+      const el = document.getElementById('page-tracking');
+      el.innerHTML = `<div class="page-header"><h1>🔍 Track Pickup</h1><p>Follow the real-time status of your pickup.</p></div><div id="track-content"><div class="spinner"></div></div>`;
+      try {
+        const { bookings } = await api('/api/bookings/my');
+        const tc = document.getElementById('track-content');
+        if (bookingId) {
+          const { booking } = await api(`/api/bookings/${bookingId}`);
+          tc.innerHTML = trackingDetail(booking);
+          setTimeout(() => initTrackMap(booking), 200);
+        } else {
+          const active = bookings.filter(b => b.status !== 'completed');
+          tc.innerHTML = active.length === 0
+            ? `<div class="empty-state"><div class="empty-icon">✅</div><h3>No active pickups</h3><p>All your pickups are completed!</p></div>`
+            : `<p style="margin-bottom:1rem;color:var(--grey-500);">Select a booking to track:</p><div class="booking-list">${active.map(b => bookingCard(b)).join('')}</div>`;
+        }
+      } catch (err) { toast(err.message, 'error'); }
+    }
+
+    function trackBooking(id) { showPage('tracking'); loadTracking(id); }
+
+    function trackingDetail(b) {
+      const steps = ['pending', 'assigned', 'on_the_way', 'completed'];
+      const icons = ['📝', '👷', '🚚', '✅'];
+      const labels = ['Pending', 'Assigned', 'On the Way', 'Completed'];
+      const ci = steps.indexOf(b.status === 'accepted' ? 'assigned' : b.status);
+      const fill = ci >= 0 ? (ci / (steps.length - 1)) * 100 : 0;
+
+      return `
+        <div class="card" style="margin-bottom:1.5rem;">
+          <h3 style="font-weight:600;margin-bottom:0.5rem;">Booking #${b.id}</h3>
+          <p style="color:var(--grey-500);font-size:0.85rem;">${b.paper_type} — ${b.paper_qty} kg</p>
+          <div class="progress-tracker">
+            <div class="progress-fill" style="width:${fill}%"></div>
+            ${steps.map((s, i) => `
+              <div class="progress-step ${i < ci ? 'completed' : i === ci ? 'active' : ''}">
+                <div class="step-circle">${icons[i]}</div>
+                <div class="step-label">${labels[i]}</div>
+              </div>`).join('')}
+          </div>
+        </div>
+        <div style="display:grid;grid-template-columns:1fr 1fr;gap:1.5rem;" class="address-grid">
+          <div class="card">
+            <h3 style="font-weight:600;margin-bottom:1rem;">📦 Pickup Details</h3>
+            <div style="font-size:0.9rem;color:var(--grey-700);line-height:2;">
+              <p><strong>Date:</strong> ${b.preferred_date}</p><p><strong>Time:</strong> ${b.preferred_time}</p>
+              <p><strong>Address:</strong> ${b.address}</p>
+              <p><strong>Status:</strong> <span class="badge badge-${b.status}">${b.status.replace(/_/g, ' ')}</span></p>
+              ${b.worker_name ? `<p><strong>Worker:</strong> ${b.worker_name}</p><p><strong>Phone:</strong> ${b.worker_phone || 'N/A'}</p>` : '<p style="color:var(--orange-500);">Worker not yet assigned</p>'}
+            </div>
+          </div>
+          <div class="card"><h3 style="font-weight:600;margin-bottom:1rem;">🗺️ Location</h3><div class="map-container" id="track-map"></div></div>
+        </div>`;
+    }
+
+    function initTrackMap(b) {
+      const c = document.getElementById('track-map');
+      if (!c) return;
+
+      const lat = b.lat || 28.6139, lng = b.lng || 77.2090;
+      const map = L.map(c).setView([lat, lng], 14);
+      L.tileLayer('https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png', { attribution: '© OpenStreetMap' }).addTo(map);
+
+      // if worker is assigned, has location, and not completed yet
+      if (b.worker_lat && b.worker_lng && ['assigned', 'on_the_way'].includes(b.status)) {
+        L.Routing.control({
+          waypoints: [
+            L.latLng(b.worker_lat, b.worker_lng),
+            L.latLng(lat, lng)
+          ],
+          routeWhileDragging: false,
+          addWaypoints: false,
+          showAlternatives: false,
+          fitSelectedRoutes: true,
+          lineOptions: { styles: [{ color: '#4CAF50', weight: 5, opacity: 0.8 }] },
+          createMarker: function (i, wp) {
+            if (i === 0) {
+              const icon = L.divIcon({ className: 'custom-map-icon', html: '🚚', iconSize: [30, 30] });
+              return L.marker(wp.latLng, { icon }).bindPopup('<b>Worker Location</b><br>On the way to pickup.');
+            } else {
+              const icon = L.divIcon({ className: 'custom-map-icon', html: '📍', iconSize: [30, 30] });
+              return L.marker(wp.latLng, { icon }).bindPopup('<b>Pickup Location</b>');
+            }
+          }
+        }).addTo(map);
+      } else {
+        const icon = L.divIcon({ className: 'custom-map-icon', html: '📍', iconSize: [30, 30] });
+        L.marker([lat, lng], { icon }).addTo(map).bindPopup('<b>Pickup Location</b>').openPopup();
+      }
+    }
+
+    /* ===== Auto-login ===== */
+    (function init() {
+      const token = localStorage.getItem('verdaserve_token');
+      const user = localStorage.getItem('verdaserve_user');
+      if (token && user) {
+        currentUser = JSON.parse(user);
+        enterApp();
+      }
+    })();
+  </script>
+</body>
+
+</html>

@@ -1,0 +1,251 @@
+<!DOCTYPE html>
+<html lang="en">
+
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>VERDASERVE – Admin Panel</title>
+    <link rel="stylesheet" href="/css/style.css">
+</head>
+
+<body>
+    <div class="toast-container" id="toast-container"></div>
+
+    <!-- Auth Section -->
+    <div id="auth-section">
+        <div class="auth-page">
+            <a href="/portal.html" class="auth-back">← Back to Staff Portal</a>
+            <div class="auth-card">
+                <div class="auth-header">
+                    <div class="brand">🌿 VERDASERVE</div>
+                    <p>Admin Login</p>
+                </div>
+                <form onsubmit="handleAuth(event)">
+                    <div class="form-group">
+                        <label class="form-label">Email</label>
+                        <input class="form-input" type="email" id="auth-email" placeholder="Enter your email" required>
+                    </div>
+                    <div class="form-group">
+                        <label class="form-label">Password</label>
+                        <input class="form-input" type="password" id="auth-password" placeholder="Enter your password"
+                            required>
+                    </div>
+                    <button class="btn btn-primary btn-block btn-lg" type="submit">Login</button>
+                </form>
+                <p class="auth-link" style="font-size:0.75rem;color:#9E9E9E;margin-top:1rem;">Default:
+                    admin@verdaserve.com / admin123</p>
+            </div>
+        </div>
+    </div>
+
+    <!-- App Shell -->
+    <div class="app-shell" id="app-shell">
+        <button class="hamburger" onclick="toggleSidebar()"><span></span><span></span><span></span></button>
+        <div class="overlay" id="overlay" onclick="toggleSidebar()"></div>
+        <aside class="sidebar" id="sidebar">
+            <div class="sidebar-header">
+                <a href="/" style="text-decoration:none;">
+                    <div class="sidebar-brand"><span class="leaf">🌿</span> VERDASERVE</div>
+                </a>
+                <div class="sidebar-role">Admin Panel</div>
+            </div>
+            <nav class="sidebar-nav">
+                <button class="nav-item active" data-page="dashboard" onclick="showPage('dashboard')"><span
+                        class="nav-icon">🏠</span> Dashboard</button>
+                <button class="nav-item" data-page="bookings" onclick="showPage('bookings')"><span
+                        class="nav-icon">📦</span> All Bookings</button>
+                <button class="nav-item" data-page="workers" onclick="showPage('workers')"><span
+                        class="nav-icon">👷</span> Workers</button>
+            </nav>
+            <div class="sidebar-footer"><button class="logout-btn" onclick="logout()">🚪 Logout</button></div>
+        </aside>
+        <main class="main-content" id="main-content">
+            <div class="page" id="page-dashboard"></div>
+            <div class="page hidden" id="page-bookings"></div>
+            <div class="page hidden" id="page-workers"></div>
+        </main>
+    </div>
+
+    <script>
+        let currentUser = null;
+        const API = '';
+
+        async function api(path, opts = {}) {
+            const token = localStorage.getItem('verdaserve_admin_token');
+            const headers = { 'Content-Type': 'application/json' };
+            if (token) headers['Authorization'] = `Bearer ${token}`;
+            const res = await fetch(`${API}${path}`, { ...opts, headers });
+            const data = await res.json();
+            if (!res.ok) throw new Error(data.error || 'Request failed');
+            return data;
+        }
+
+        function toast(msg, type = 'success') {
+            const c = document.getElementById('toast-container');
+            const t = document.createElement('div');
+            t.className = `toast toast-${type}`;
+            t.textContent = msg;
+            c.appendChild(t);
+            setTimeout(() => t.remove(), 3000);
+        }
+
+        function toggleSidebar() {
+            document.getElementById('sidebar').classList.toggle('open');
+            document.getElementById('overlay').classList.toggle('active');
+        }
+
+        /* Auth */
+        async function handleAuth(e) {
+            e.preventDefault();
+            try {
+                const data = await api('/api/auth/admin-login', {
+                    method: 'POST', body: JSON.stringify({
+                        email: document.getElementById('auth-email').value,
+                        password: document.getElementById('auth-password').value,
+                    })
+                });
+                currentUser = data.user;
+                localStorage.setItem('verdaserve_admin_token', data.token);
+                localStorage.setItem('verdaserve_admin', JSON.stringify(currentUser));
+                toast(`Welcome, ${currentUser.name}!`);
+                enterApp();
+            } catch (err) { toast(err.message, 'error'); }
+        }
+
+        function enterApp() {
+            document.getElementById('auth-section').style.display = 'none';
+            document.getElementById('app-shell').classList.add('active');
+            showPage('dashboard');
+        }
+
+        function logout() {
+            localStorage.removeItem('verdaserve_admin_token');
+            localStorage.removeItem('verdaserve_admin');
+            currentUser = null;
+            location.reload();
+        }
+
+        /* Page Nav */
+        function showPage(page) {
+            document.querySelectorAll('.page').forEach(p => p.classList.add('hidden'));
+            document.getElementById(`page-${page}`).classList.remove('hidden');
+            document.querySelectorAll('.nav-item').forEach(n => n.classList.remove('active'));
+            document.querySelector(`.nav-item[data-page="${page}"]`)?.classList.add('active');
+            document.getElementById('sidebar').classList.remove('open');
+            document.getElementById('overlay').classList.remove('active');
+            switch (page) {
+                case 'dashboard': loadDashboard(); break;
+                case 'bookings': loadBookings(); break;
+                case 'workers': loadWorkers(); break;
+            }
+        }
+
+        /* Dashboard */
+        async function loadDashboard() {
+            const el = document.getElementById('page-dashboard');
+            el.innerHTML = `
+        <div class="page-header"><h1>⚙️ Admin Dashboard</h1><p>Overview of all operations.</p></div>
+        <div class="stats-grid" id="admin-stats"><div class="spinner"></div></div>
+        <h2 style="font-size:1.2rem;font-weight:600;margin-bottom:1rem;">Recent Bookings</h2>
+        <div id="admin-recent"><div class="spinner"></div></div>
+      `;
+            try {
+                const stats = await api('/api/admin/stats');
+                document.getElementById('admin-stats').innerHTML = `
+          <div class="stat-card"><div class="stat-icon green">📦</div><div class="stat-value">${stats.total}</div><div class="stat-label">Total Bookings</div></div>
+          <div class="stat-card"><div class="stat-icon orange">⏳</div><div class="stat-value">${stats.pending}</div><div class="stat-label">Pending</div></div>
+          <div class="stat-card"><div class="stat-icon blue">🔄</div><div class="stat-value">${stats.assigned}</div><div class="stat-label">In Progress</div></div>
+          <div class="stat-card"><div class="stat-icon green">✅</div><div class="stat-value">${stats.completed}</div><div class="stat-label">Completed</div></div>
+          <div class="stat-card"><div class="stat-icon green">👤</div><div class="stat-value">${stats.totalUsers}</div><div class="stat-label">Users</div></div>
+          <div class="stat-card"><div class="stat-icon blue">👷</div><div class="stat-value">${stats.totalWorkers}</div><div class="stat-label">Workers</div></div>
+          <div class="stat-card"><div class="stat-icon green">♻️</div><div class="stat-value">${stats.totalPaper} kg</div><div class="stat-label">Paper Collected</div></div>
+        `;
+                const { bookings } = await api('/api/bookings');
+                const rc = document.getElementById('admin-recent');
+                if (bookings.length === 0) {
+                    rc.innerHTML = `<div class="empty-state"><div class="empty-icon">📭</div><h3>No bookings</h3></div>`;
+                } else {
+                    rc.innerHTML = `<div class="table-container"><table class="table">
+            <thead><tr><th>ID</th><th>Customer</th><th>Paper</th><th>Qty</th><th>Date</th><th>Status</th><th>Worker</th></tr></thead>
+            <tbody>${bookings.slice(0, 10).map(b => `
+              <tr>
+                <td>#${b.id}</td><td>${b.user_name || 'N/A'}</td><td>${b.paper_type}</td><td>${b.paper_qty} kg</td>
+                <td>${b.preferred_date}</td>
+                <td><span class="badge badge-${b.status}">${b.status.replace(/_/g, ' ')}</span></td>
+                <td>${b.worker_name || '<em style="color:var(--grey-400)">Unassigned</em>'}</td>
+              </tr>`).join('')}</tbody>
+          </table></div>`;
+                }
+            } catch (err) { toast(err.message, 'error'); }
+        }
+
+        /* All Bookings */
+        async function loadBookings() {
+            const el = document.getElementById('page-bookings');
+            el.innerHTML = `<div class="page-header"><h1>📦 All Bookings</h1><p>Manage and assign workers to bookings.</p></div><div id="bookings-list"><div class="spinner"></div></div>`;
+            try {
+                const { bookings } = await api('/api/bookings');
+                const { workers } = await api('/api/workers');
+                const c = document.getElementById('bookings-list');
+                if (bookings.length === 0) {
+                    c.innerHTML = `<div class="empty-state"><div class="empty-icon">📭</div><h3>No bookings</h3></div>`;
+                    return;
+                }
+                c.innerHTML = `<div class="table-container"><table class="table">
+          <thead><tr><th>ID</th><th>Customer</th><th>Paper</th><th>Qty</th><th>Date</th><th>Address</th><th>Status</th><th>Assign Worker</th></tr></thead>
+          <tbody>${bookings.map(b => `
+            <tr>
+              <td>#${b.id}</td>
+              <td>${b.user_name || 'N/A'}<br><span style="font-size:0.75rem;color:var(--grey-400);">${b.user_email || ''}</span></td>
+              <td>${b.paper_type}</td><td>${b.paper_qty} kg</td>
+              <td>${b.preferred_date}<br><span style="font-size:0.75rem;">${b.preferred_time}</span></td>
+              <td style="max-width:150px;overflow:hidden;text-overflow:ellipsis;">${b.address}</td>
+              <td><span class="badge badge-${b.status}">${b.status.replace(/_/g, ' ')}</span></td>
+              <td>${b.status === 'pending' ? `
+                <select class="form-select" style="width:auto;padding:0.4rem;font-size:0.8rem;" onchange="assignWorker(${b.id}, this.value)">
+                  <option value="">Select...</option>
+                  ${workers.map(w => `<option value="${w.id}">${w.name} (${w.vehicle_type})</option>`).join('')}
+                </select>
+              ` : `${b.worker_name || 'N/A'}`}</td>
+            </tr>`).join('')}</tbody>
+        </table></div>`;
+            } catch (err) { toast(err.message, 'error'); }
+        }
+
+        async function assignWorker(bookingId, workerId) {
+            if (!workerId) return;
+            try {
+                await api(`/api/bookings/${bookingId}/assign`, { method: 'PATCH', body: JSON.stringify({ worker_id: parseInt(workerId) }) });
+                toast('Worker assigned! 👷');
+                loadBookings();
+            } catch (err) { toast(err.message, 'error'); }
+        }
+
+        /* Workers */
+        async function loadWorkers() {
+            const el = document.getElementById('page-workers');
+            el.innerHTML = `<div class="page-header"><h1>👷 Workers</h1><p>View all registered workers.</p></div><div id="workers-list"><div class="spinner"></div></div>`;
+            try {
+                const { workers } = await api('/api/workers');
+                document.getElementById('workers-list').innerHTML = `<div class="table-container"><table class="table">
+          <thead><tr><th>ID</th><th>Name</th><th>Email</th><th>Phone</th><th>Vehicle</th><th>Status</th></tr></thead>
+          <tbody>${workers.map(w => `
+            <tr>
+              <td>#${w.id}</td><td>${w.name}</td><td>${w.email}</td><td>${w.phone || 'N/A'}</td>
+              <td>${w.vehicle_type}</td>
+              <td><span class="badge ${w.is_available ? 'badge-completed' : 'badge-pending'}">${w.is_available ? 'Available' : 'Busy'}</span></td>
+            </tr>`).join('')}</tbody>
+        </table></div>`;
+            } catch (err) { toast(err.message, 'error'); }
+        }
+
+        /* Auto-login */
+        (function init() {
+            const token = localStorage.getItem('verdaserve_admin_token');
+            const user = localStorage.getItem('verdaserve_admin');
+            if (token && user) { currentUser = JSON.parse(user); enterApp(); }
+        })();
+    </script>
+</body>
+
+</html>
