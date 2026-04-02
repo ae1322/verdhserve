@@ -57,6 +57,8 @@
                     Live Map</button>
                 <button class="nav-item" data-page="vehicle" onclick="showPage('vehicle')"><span
                         class="nav-icon">🚗</span> My Vehicle</button>
+                <button class="nav-item" data-page="profile" onclick="showPage('profile')"><span
+                        class="nav-icon">👤</span> My Profile</button>
             </nav>
             <div class="sidebar-footer"><button class="logout-btn" onclick="logout()">🚪 Logout</button></div>
         </aside>
@@ -64,6 +66,7 @@
             <div class="page" id="page-dashboard"></div>
             <div class="page hidden" id="page-map"></div>
             <div class="page hidden" id="page-vehicle"></div>
+            <div class="page hidden" id="page-profile"></div>
         </main>
     </div>
 
@@ -139,6 +142,7 @@
                 case 'dashboard': loadDashboard(); break;
                 case 'map': loadMap(); break;
                 case 'vehicle': loadVehicle(); break;
+                case 'profile': loadProfile(); break;
             }
         }
 
@@ -174,7 +178,9 @@
         function workerCard(b) {
             const statusText = b.status.replace(/_/g, ' ').replace(/\b\w/g, c => c.toUpperCase());
             let btns = '';
-            if (b.status === 'assigned') btns = `<button class="btn btn-success btn-sm" onclick="updateStatus(${b.id},'accepted')">✅ Accept</button>`;
+            if (b.status === 'assigned') btns = `
+                <button class="btn btn-success btn-sm" onclick="updateStatus(${b.id},'accepted')">✅ Accept</button>
+                <button class="btn btn-danger btn-sm" onclick="unassignBooking(${b.id})">❌ Reject</button>`;
             else if (b.status === 'accepted') btns = `<button class="btn btn-warning btn-sm" onclick="updateStatus(${b.id},'on_the_way')">🚚 On the Way</button>`;
             else if (b.status === 'on_the_way') btns = `<button class="btn btn-primary btn-sm" onclick="updateStatus(${b.id},'completed')">✅ Complete</button>`;
 
@@ -202,6 +208,15 @@
                 toast(`Status updated to ${status.replace(/_/g, ' ')}! ✅`);
                 loadDashboard();
             } catch (err) { toast(err.message, 'error'); }
+        }
+
+        async function unassignBooking(id) {
+            if (!confirm('Are you sure you want to reject this booking?')) return;
+            try {
+                await api(`/api/bookings/${id}/unassign`, { method: 'PATCH' });
+                toast('Booking rejected and removed from your list.');
+                loadDashboard();
+            } catch (e) { toast(e.message, 'error'); }
         }
 
         /* Map */
@@ -276,6 +291,38 @@
                 currentUser.vehicle_type = selectedVehicle;
                 localStorage.setItem('verdaserve_worker', JSON.stringify(currentUser));
                 toast('Vehicle updated! 🚗');
+            } catch (err) { toast(err.message, 'error'); }
+        }
+
+        /* Profile */
+        function loadProfile() {
+            document.getElementById('page-profile').innerHTML = `
+                <div class="page-header"><h1>👤 My Profile</h1><p>Update your contact and address details.</p></div>
+                <div class="card" style="max-width:600px;">
+                    <form onsubmit="saveWorkerProfile(event)">
+                        <div class="form-group"><label class="form-label">Name</label><input class="form-input" id="wp-name" required value="${currentUser.name}"></div>
+                        <div class="form-group"><label class="form-label">Phone</label><input class="form-input" id="wp-phone" value="${currentUser.phone || ''}"></div>
+                        <div class="form-group"><label class="form-label">Address</label><textarea class="form-input" id="wp-address" rows="3">${currentUser.address || ''}</textarea></div>
+                        <button class="btn btn-primary btn-block" type="submit">💾 Save Profile</button>
+                    </form>
+                </div>
+            `;
+        }
+
+        async function saveWorkerProfile(e) {
+            e.preventDefault();
+            try {
+                const { worker } = await api('/api/workers/profile', {
+                    method: 'PUT',
+                    body: JSON.stringify({
+                        name: document.getElementById('wp-name').value,
+                        phone: document.getElementById('wp-phone').value,
+                        address: document.getElementById('wp-address').value
+                    })
+                });
+                currentUser = worker;
+                localStorage.setItem('verdaserve_worker', JSON.stringify(currentUser));
+                toast('Profile updated! ✅');
             } catch (err) { toast(err.message, 'error'); }
         }
 

@@ -71,7 +71,14 @@ router.put('/profile', (req, res) => {
         const decoded = jwt.verify(token, SECRET);
         const { name, phone, address, lat, lng } = req.body;
         runQuery('UPDATE users SET name = COALESCE(?, name), phone = COALESCE(?, phone), address = COALESCE(?, address), lat = COALESCE(?, lat), lng = COALESCE(?, lng) WHERE id = ?',
-            [name, phone, address, lat, lng, decoded.id]);
+            [
+                name !== undefined ? name : null,
+                phone !== undefined ? phone : null,
+                address !== undefined ? address : null,
+                lat !== undefined ? lat : null,
+                lng !== undefined ? lng : null,
+                decoded.id
+            ]);
         const user = getOne('SELECT id, name, email, phone, address, lat, lng, role FROM users WHERE id = ?', [decoded.id]);
         res.json({ user });
     } catch (e) {

@@ -66,6 +66,73 @@
         </main>
     </div>
 
+    <!-- Edit Booking Modal -->
+    <div class="overlay hidden" id="edit-booking-overlay" onclick="closeAdminBookingModal()"
+        style="z-index: 1000; background: rgba(0,0,0,0.5);"></div>
+    <div class="card hidden" id="edit-booking-modal"
+        style="position:fixed;top:50%;left:50%;transform:translate(-50%,-50%);z-index:1001;width:90%;max-width:500px;background:white;">
+        <h3 style="margin-bottom:1rem;font-weight:600;">Edit Booking</h3>
+        <form id="edit-booking-form" onsubmit="submitAdminBooking(event)">
+            <input type="hidden" id="ab-id">
+            <div class="form-group"><label class="form-label">Paper Quantity (kg)</label><input class="form-input"
+                    type="number" id="ab-qty" step="0.5" required></div>
+            <div class="form-group"><label class="form-label">Paper Type</label><input class="form-input" id="ab-type"
+                    required></div>
+            <div style="display:flex;gap:1rem;">
+                <button class="btn btn-secondary btn-block" type="button"
+                    onclick="closeAdminBookingModal()">Cancel</button>
+                <button class="btn btn-primary btn-block" type="submit">💾 Save Changes</button>
+            </div>
+        </form>
+    </div>
+
+    <!-- Edit Worker Modal -->
+    <div class="overlay hidden" id="edit-worker-overlay" onclick="closeAdminWorkerModal()"
+        style="z-index: 1000; background: rgba(0,0,0,0.5);"></div>
+    <div class="card hidden" id="edit-worker-modal"
+        style="position:fixed;top:50%;left:50%;transform:translate(-50%,-50%);z-index:1001;width:90%;max-width:500px;background:white;">
+        <h3 style="margin-bottom:1rem;font-weight:600;">Edit Worker</h3>
+        <form id="edit-worker-form" onsubmit="submitAdminWorker(event)">
+            <input type="hidden" id="aw-id">
+            <div class="form-group"><label class="form-label">Name</label><input class="form-input" id="aw-name"
+                    required></div>
+            <div class="form-group"><label class="form-label">Phone</label><input class="form-input" id="aw-phone">
+            </div>
+            <div class="form-group"><label class="form-label">Vehicle Type</label><input class="form-input"
+                    id="aw-vehicle"></div>
+            <div style="display:flex;gap:1rem;">
+                <button class="btn btn-secondary btn-block" type="button"
+                    onclick="closeAdminWorkerModal()">Cancel</button>
+                <button class="btn btn-primary btn-block" type="submit">💾 Save Changes</button>
+            </div>
+        </form>
+    </div>
+
+    <!-- Add Worker Modal -->
+    <div class="overlay hidden" id="add-worker-overlay" onclick="closeAddWorkerModal()"
+        style="z-index: 1000; background: rgba(0,0,0,0.5);"></div>
+    <div class="card hidden" id="add-worker-modal"
+        style="position:fixed;top:50%;left:50%;transform:translate(-50%,-50%);z-index:1001;width:90%;max-width:500px;background:white;">
+        <h3 style="margin-bottom:1rem;font-weight:600;">+ Add New Worker</h3>
+        <form id="add-worker-form" onsubmit="submitAddWorker(event)">
+            <div class="form-group"><label class="form-label">Name</label><input class="form-input" id="nw-name"
+                    required></div>
+            <div class="form-group"><label class="form-label">Email</label><input class="form-input" type="email"
+                    id="nw-email" required></div>
+            <div class="form-group"><label class="form-label">Password</label><input class="form-input" type="password"
+                    id="nw-password" required></div>
+            <div class="form-group"><label class="form-label">Phone</label><input class="form-input" id="nw-phone">
+            </div>
+            <div class="form-group"><label class="form-label">Vehicle Type</label><input class="form-input"
+                    id="nw-vehicle" placeholder="bike, auto, van..."></div>
+            <div style="display:flex;gap:1rem;">
+                <button class="btn btn-secondary btn-block" type="button"
+                    onclick="closeAddWorkerModal()">Cancel</button>
+                <button class="btn btn-primary btn-block" type="submit">💾 Add Worker</button>
+            </div>
+        </form>
+    </div>
+
     <script>
         let currentUser = null;
         const API = '';
@@ -192,7 +259,7 @@
                     return;
                 }
                 c.innerHTML = `<div class="table-container"><table class="table">
-          <thead><tr><th>ID</th><th>Customer</th><th>Paper</th><th>Qty</th><th>Date</th><th>Address</th><th>Status</th><th>Assign Worker</th></tr></thead>
+          <thead><tr><th>ID</th><th>Customer</th><th>Paper</th><th>Qty</th><th>Date</th><th>Address</th><th>Status</th><th>Assign Worker</th><th>Actions</th></tr></thead>
           <tbody>${bookings.map(b => `
             <tr>
               <td>#${b.id}</td>
@@ -207,8 +274,52 @@
                   ${workers.map(w => `<option value="${w.id}">${w.name} (${w.vehicle_type})</option>`).join('')}
                 </select>
               ` : `${b.worker_name || 'N/A'}`}</td>
+              <td>
+                <div style="display:flex;gap:0.25rem;">
+                  <button class="btn btn-primary btn-sm" onclick="openAdminBookingModal(${b.id})">Edit</button>
+                  <button class="btn btn-warning btn-sm" onclick="deleteAdminBooking(${b.id})">Del</button>
+                </div>
+              </td>
             </tr>`).join('')}</tbody>
         </table></div>`;
+            } catch (err) { toast(err.message, 'error'); }
+        }
+
+        async function deleteAdminBooking(id) {
+            if (!confirm('Are you sure you want to delete this booking?')) return;
+            try { await api(`/api/bookings/${id}`, { method: 'DELETE' }); loadBookings(); toast('Booking deleted'); } catch (err) { toast(err.message, 'error'); }
+        }
+
+        async function openAdminBookingModal(id) {
+            try {
+                const { booking } = await api(`/api/bookings/${id}`);
+                document.getElementById('ab-id').value = booking.id;
+                document.getElementById('ab-qty').value = booking.paper_qty;
+                document.getElementById('ab-type').value = booking.paper_type;
+                document.getElementById('edit-booking-overlay').classList.remove('hidden');
+                document.getElementById('edit-booking-modal').classList.remove('hidden');
+            } catch (err) { toast(err.message, 'error') }
+        }
+
+        function closeAdminBookingModal() {
+            document.getElementById('edit-booking-overlay').classList.add('hidden');
+            document.getElementById('edit-booking-modal').classList.add('hidden');
+        }
+
+        async function submitAdminBooking(e) {
+            e.preventDefault();
+            const id = document.getElementById('ab-id').value;
+            const { booking } = await api(`/api/bookings/${id}`);
+            try {
+                await api(`/api/bookings/${id}`, {
+                    method: 'PUT',
+                    body: JSON.stringify({
+                        ...booking,
+                        paper_qty: parseFloat(document.getElementById('ab-qty').value),
+                        paper_type: document.getElementById('ab-type').value
+                    })
+                });
+                closeAdminBookingModal(); loadBookings(); toast('Booking updated');
             } catch (err) { toast(err.message, 'error'); }
         }
 
@@ -224,18 +335,93 @@
         /* Workers */
         async function loadWorkers() {
             const el = document.getElementById('page-workers');
-            el.innerHTML = `<div class="page-header"><h1>👷 Workers</h1><p>View all registered workers.</p></div><div id="workers-list"><div class="spinner"></div></div>`;
+            el.innerHTML = `
+              <div class="page-header" style="display:flex; justify-content:space-between; align-items:center;">
+                <div><h1>👷 Workers</h1><p>View all registered workers.</p></div>
+                <button class="btn btn-primary" onclick="openAddWorkerModal()">➕ Add Worker</button>
+              </div>
+              <div id="workers-list"><div class="spinner"></div></div>
+            `;
             try {
                 const { workers } = await api('/api/workers');
                 document.getElementById('workers-list').innerHTML = `<div class="table-container"><table class="table">
-          <thead><tr><th>ID</th><th>Name</th><th>Email</th><th>Phone</th><th>Vehicle</th><th>Status</th></tr></thead>
+          <thead><tr><th>ID</th><th>Name</th><th>Email</th><th>Phone</th><th>Vehicle</th><th>Status</th><th>Actions</th></tr></thead>
           <tbody>${workers.map(w => `
             <tr>
               <td>#${w.id}</td><td>${w.name}</td><td>${w.email}</td><td>${w.phone || 'N/A'}</td>
               <td>${w.vehicle_type}</td>
               <td><span class="badge ${w.is_available ? 'badge-completed' : 'badge-pending'}">${w.is_available ? 'Available' : 'Busy'}</span></td>
+              <td>
+                <div style="display:flex;gap:0.25rem;">
+                  <button class="btn btn-primary btn-sm" onclick="openAdminWorkerModal(${w.id}, '${w.name}', '${w.phone || ''}', '${w.vehicle_type || ''}')">Edit</button>
+                  <button class="btn btn-warning btn-sm" onclick="deleteAdminWorker(${w.id})">Del</button>
+                </div>
+              </td>
             </tr>`).join('')}</tbody>
         </table></div>`;
+            } catch (err) { toast(err.message, 'error'); }
+        }
+
+        async function deleteAdminWorker(id) {
+            if (!confirm('Are you sure you want to delete this worker? This will unassign all their bookings.')) return;
+            try { await api(`/api/workers/${id}`, { method: 'DELETE' }); loadWorkers(); toast('Worker deleted'); } catch (err) { toast(err.message, 'error'); }
+        }
+
+        function openAdminWorkerModal(id, name, phone, vehicle) {
+            document.getElementById('aw-id').value = id;
+            document.getElementById('aw-name').value = name;
+            document.getElementById('aw-phone').value = phone;
+            document.getElementById('aw-vehicle').value = vehicle;
+            document.getElementById('edit-worker-overlay').classList.remove('hidden');
+            document.getElementById('edit-worker-modal').classList.remove('hidden');
+        }
+
+        function closeAdminWorkerModal() {
+            document.getElementById('edit-worker-overlay').classList.add('hidden');
+            document.getElementById('edit-worker-modal').classList.add('hidden');
+        }
+
+        async function submitAdminWorker(e) {
+            e.preventDefault();
+            const id = document.getElementById('aw-id').value;
+            try {
+                await api(`/api/workers/${id}`, {
+                    method: 'PUT',
+                    body: JSON.stringify({
+                        name: document.getElementById('aw-name').value,
+                        phone: document.getElementById('aw-phone').value,
+                        vehicle_type: document.getElementById('aw-vehicle').value
+                    })
+                });
+                closeAdminWorkerModal(); loadWorkers(); toast('Worker updated');
+            } catch (err) { toast(err.message, 'error'); }
+        }
+
+        function openAddWorkerModal() {
+            document.getElementById('add-worker-form').reset();
+            document.getElementById('add-worker-overlay').classList.remove('hidden');
+            document.getElementById('add-worker-modal').classList.remove('hidden');
+        }
+
+        function closeAddWorkerModal() {
+            document.getElementById('add-worker-overlay').classList.add('hidden');
+            document.getElementById('add-worker-modal').classList.add('hidden');
+        }
+
+        async function submitAddWorker(e) {
+            e.preventDefault();
+            try {
+                await api('/api/workers', {
+                    method: 'POST',
+                    body: JSON.stringify({
+                        name: document.getElementById('nw-name').value,
+                        email: document.getElementById('nw-email').value,
+                        password: document.getElementById('nw-password').value,
+                        phone: document.getElementById('nw-phone').value,
+                        vehicle_type: document.getElementById('nw-vehicle').value || 'bike'
+                    })
+                });
+                closeAddWorkerModal(); loadWorkers(); toast('Worker added successfully!');
             } catch (err) { toast(err.message, 'error'); }
         }
 

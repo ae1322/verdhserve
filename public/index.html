@@ -77,6 +77,9 @@
         <button class="nav-item" data-page="my-bookings" onclick="showPage('my-bookings')">
           <span class="nav-icon">📋</span> My Bookings
         </button>
+        <button class="nav-item" data-page="my-profile" onclick="showPage('my-profile')">
+          <span class="nav-icon">👤</span> My Profile
+        </button>
         <button class="nav-item" data-page="tracking" onclick="showPage('tracking')">
           <span class="nav-icon">🔍</span> Track Pickup
         </button>
@@ -91,8 +94,48 @@
       <div class="page hidden" id="page-book-pickup"></div>
       <div class="page hidden" id="page-my-address"></div>
       <div class="page hidden" id="page-my-bookings"></div>
+      <div class="page hidden" id="page-my-profile"></div>
       <div class="page hidden" id="page-tracking"></div>
     </main>
+  </div>
+
+  <!-- Edit Booking Modal -->
+  <div class="overlay hidden" id="edit-modal-overlay" onclick="closeEditModal()"
+    style="z-index: 1000; background: rgba(0,0,0,0.5);"></div>
+  <div class="card hidden" id="edit-modal"
+    style="position:fixed;top:50%;left:50%;transform:translate(-50%,-50%);z-index:1001;width:90%;max-width:500px;background:white;">
+    <h3 style="margin-bottom:1rem;font-weight:600;">Edit Booking</h3>
+    <form id="edit-booking-form" onsubmit="submitEditBooking(event)">
+      <input type="hidden" id="eb-id">
+      <div class="form-group">
+        <label class="form-label">Paper Quantity (kg)</label>
+        <input class="form-input" type="number" id="eb-qty" min="1" max="1000" step="0.5" required>
+      </div>
+      <div class="form-group">
+        <label class="form-label">Paper Type</label>
+        <select class="form-select" id="eb-type" required>
+          <option value="newspaper">📰 Newspaper</option>
+          <option value="books">📚 Books</option>
+          <option value="mixed">📄 Mixed Paper</option>
+          <option value="cardboard">📦 Cardboard</option>
+          <option value="office">🏢 Office Paper</option>
+        </select>
+      </div>
+      <div style="display:grid;grid-template-columns:1fr 1fr;gap:1rem;">
+        <div class="form-group"><label class="form-label">Date</label><input class="form-input" type="date" id="eb-date"
+            required></div>
+        <div class="form-group"><label class="form-label">Time</label><input class="form-input" type="time" id="eb-time"
+            required></div>
+      </div>
+      <div class="form-group">
+        <label class="form-label">Address</label>
+        <textarea class="form-input" id="eb-address" rows="3" required></textarea>
+      </div>
+      <div style="display:flex;gap:1rem;">
+        <button class="btn btn-secondary btn-block" type="button" onclick="closeEditModal()">Cancel</button>
+        <button class="btn btn-primary btn-block" type="submit">💾 Save Changes</button>
+      </div>
+    </form>
   </div>
 
   <script src="https://unpkg.com/leaflet@1.9.4/dist/leaflet.js"></script>
@@ -187,6 +230,7 @@
         case 'book-pickup': loadBookPickup(); break;
         case 'my-address': loadAddress(); break;
         case 'my-bookings': loadBookings(); break;
+        case 'my-profile': loadProfile(); break;
         case 'tracking': loadTracking(); break;
       }
     }
@@ -230,6 +274,16 @@
 
     function bookingCard(b) {
       const statusText = b.status.replace(/_/g, ' ').replace(/\b\w/g, c => c.toUpperCase());
+      let trackingBtn = b.status !== 'completed' ? `<button class="btn btn-secondary btn-sm" style="margin-top:0.5rem;" onclick="trackBooking(${b.id})">Track</button>` : '';
+      let actionBtns = '';
+      if (b.status === 'pending') {
+        actionBtns = `
+            <div style="margin-top: 0.5rem; display: flex; gap: 0.5rem; justify-content: flex-end;">
+              <button class="btn btn-primary btn-sm" onclick="openEditBooking(${b.id})">Edit</button>
+              <button class="btn btn-warning btn-sm" onclick="deleteBooking(${b.id})">Delete</button>
+            </div>
+          `;
+      }
       return `
         <div class="booking-card">
           <div class="booking-info">
@@ -242,9 +296,67 @@
           </div>
           <div style="text-align:right;">
             <span class="badge badge-${b.status}">${statusText}</span>
-            ${b.status !== 'completed' ? `<br><button class="btn btn-secondary btn-sm" style="margin-top:0.5rem;" onclick="trackBooking(${b.id})">Track</button>` : ''}
+            <br>${trackingBtn}
+            ${actionBtns}
           </div>
         </div>`;
+    }
+
+    /* ===== Edit/Delete Bookings ===== */
+    async function deleteBooking(id) {
+      if (!confirm('Are you sure you want to delete this booking?')) return;
+      try {
+        await api(`/api/bookings/${id}`, { method: 'DELETE' });
+        toast('Booking deleted successfully');
+        if (document.getElementById('page-dashboard').classList.contains('hidden') === false) loadDashboard();
+        else loadBookings();
+      } catch (e) {
+        toast(e.message, 'error');
+      }
+    }
+
+    async function openEditBooking(id) {
+      try {
+        const { booking } = await api(`/api/bookings/${id}`);
+        document.getElementById('eb-id').value = booking.id;
+        document.getElementById('eb-qty').value = booking.paper_qty;
+        document.getElementById('eb-type').value = booking.paper_type;
+        document.getElementById('eb-date').value = booking.preferred_date;
+        document.getElementById('eb-time').value = booking.preferred_time;
+        document.getElementById('eb-address').value = booking.address;
+        document.getElementById('edit-modal-overlay').classList.remove('hidden');
+        document.getElementById('edit-modal').classList.remove('hidden');
+      } catch (e) {
+        toast(e.message, 'error');
+      }
+    }
+
+    function closeEditModal() {
+      document.getElementById('edit-modal-overlay').classList.add('hidden');
+      document.getElementById('edit-modal').classList.add('hidden');
+    }
+
+    async function submitEditBooking(e) {
+      e.preventDefault();
+      const id = document.getElementById('eb-id').value;
+      try {
+        await api(`/api/bookings/${id}`, {
+          method: 'PUT',
+          body: JSON.stringify({
+            paper_qty: parseFloat(document.getElementById('eb-qty').value),
+            paper_type: document.getElementById('eb-type').value,
+            preferred_date: document.getElementById('eb-date').value,
+            preferred_time: document.getElementById('eb-time').value,
+            address: document.getElementById('eb-address').value,
+          })
+        });
+        toast('Booking updated successfully');
+        closeEditModal();
+        if (document.getElementById('page-dashboard').classList.contains('hidden') === false) loadDashboard();
+        else loadBookings();
+      } catch (err) {
+        toast(err.message, 'error');
+      }
     }
 
     /* ===== Book Pickup ===== */
@@ -344,6 +456,46 @@
         localStorage.setItem('verdaserve_user', JSON.stringify(data.user));
         currentUser = data.user;
         toast('Address saved! 📍');
+      } catch (err) { toast(err.message, 'error'); }
+    }
+
+    /* ===== My Profile ===== */
+    function loadProfile() {
+      const user = JSON.parse(localStorage.getItem('verdaserve_user') || '{}');
+      document.getElementById('page-my-profile').innerHTML = `
+        <div class="page-header"><h1>👤 My Profile</h1><p>View and update your personal details.</p></div>
+        <div class="card" style="max-width:600px;">
+          <form onsubmit="saveProfile(event)">
+            <div class="form-group">
+              <label class="form-label">Full Name</label>
+              <input class="form-input" type="text" id="prof-name" value="${user.name || ''}" required>
+            </div>
+            <div class="form-group">
+              <label class="form-label">Email (Read-only)</label>
+              <input class="form-input" type="email" value="${user.email || ''}" disabled style="background:#f1f5f9;cursor:not-allowed;">
+            </div>
+            <div class="form-group">
+              <label class="form-label">Phone</label>
+              <input class="form-input" type="tel" id="prof-phone" value="${user.phone || ''}">
+            </div>
+            <button class="btn btn-primary btn-block btn-lg" type="submit">💾 Save Changes</button>
+          </form>
+        </div>
+      `;
+    }
+
+    async function saveProfile(e) {
+      e.preventDefault();
+      try {
+        const data = await api('/api/auth/profile', {
+          method: 'PUT', body: JSON.stringify({
+            name: document.getElementById('prof-name').value,
+            phone: document.getElementById('prof-phone').value
+          })
+        });
+        localStorage.setItem('verdaserve_user', JSON.stringify(data.user));
+        currentUser = data.user;
+        toast('Profile updated successfully! ✅');
       } catch (err) { toast(err.message, 'error'); }
     }
 

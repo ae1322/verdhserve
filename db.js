@@ -40,6 +40,7 @@ async function initDB() {
       email TEXT UNIQUE NOT NULL,
       password TEXT NOT NULL,
       phone TEXT DEFAULT '',
+      address TEXT DEFAULT '',
       vehicle_type TEXT DEFAULT 'bike',
       is_available INTEGER DEFAULT 1,
       lat REAL DEFAULT 0,
@@ -47,6 +48,12 @@ async function initDB() {
       created_at DATETIME DEFAULT CURRENT_TIMESTAMP
     )
   `);
+
+  try {
+    db.exec("SELECT address FROM workers LIMIT 1");
+  } catch (e) {
+    db.run("ALTER TABLE workers ADD COLUMN address TEXT DEFAULT ''");
+  }
 
   db.run(`
     CREATE TABLE IF NOT EXISTS bookings (

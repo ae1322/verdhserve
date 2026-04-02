@@ -105,4 +105,43 @@ router.patch('/:id/assign', authMiddleware, (req, res) => {
     }
 });
 
+// Unassign worker from booking (worker action)
+router.patch('/:id/unassign', authMiddleware, (req, res) => {
+    try {
+        // Can only be done by the assigned worker
+        const booking = getOne('SELECT worker_id FROM bookings WHERE id = ?', [parseInt(req.params.id)]);
+        if (!booking || booking.worker_id !== req.user.id) return res.status(403).json({ error: 'Not authorized' });
+
+        runQuery('UPDATE bookings SET worker_id = NULL, status = ?, updated_at = CURRENT_TIMESTAMP WHERE id = ?', ['pending', parseInt(req.params.id)]);
+        res.json({ success: true });
+    } catch (e) {
+        res.status(500).json({ error: e.message });
+    }
+});
+
+// Update booking details
+router.put('/:id', authMiddleware, (req, res) => {
+    try {
+        const { paper_qty, paper_type, preferred_date, preferred_time, address } = req.body;
+        runQuery(
+            'UPDATE bookings SET paper_qty = ?, paper_type = ?, preferred_date = ?, preferred_time = ?, address = ?, updated_at = CURRENT_TIMESTAMP WHERE id = ?',
+            [paper_qty, paper_type, preferred_date, preferred_time, address, parseInt(req.params.id)]
+        );
+        const booking = getOne('SELECT * FROM bookings WHERE id = ?', [parseInt(req.params.id)]);
+        res.json({ booking });
+    } catch (e) {
+        res.status(500).json({ error: e.message });
+    }
+});
+
+// Delete a booking
+router.delete('/:id', authMiddleware, (req, res) => {
+    try {
+        runQuery('DELETE FROM bookings WHERE id = ?', [parseInt(req.params.id)]);
+        res.json({ success: true });
+    } catch (e) {
+        res.status(500).json({ error: e.message });
+    }
+});
+
 module.exports = router;
